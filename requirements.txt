@@ -1,0 +1,34 @@
+# --- Core API Framework ---
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+pydantic-settings
+python-dotenv
+
+# --- AI & Vector Database (RAG) ---
+openai
+pinecone
+langchain
+langchain-openai
+langchain-pinecone
+langchain-community
+langchain-text-splitters
+tiktoken
+sentence-transformers
+
+# --- Document Parsing (File Uploads) ---
+pypdf
+pandas
+openpyxl
+
+# --- Authentication (Firebase) ---
+firebase-admin
+
+# --- Database Connections (SQL/NoSQL) ---
+sqlalchemy
+psycopg2-binary
+pymysql
+pymongo
+motor
+dnspython
