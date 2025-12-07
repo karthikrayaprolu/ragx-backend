@@ -34,4 +34,3 @@ motor
 dnspython
 langchain-mongodb 
 pymongo 
-langchain-openai

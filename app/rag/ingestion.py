@@ -10,6 +10,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+from app.services.document_service import document_service
+
 class DocumentIngestionService:
     """Service for ingesting and processing documents into vector embeddings."""
     
@@ -22,7 +24,7 @@ class DocumentIngestionService:
         )
         self.parser = DocumentParser()
     
-    def process_document(
+    async def process_document(
         self,
         user_id: str,
         file_content: bytes,
@@ -32,16 +34,6 @@ class DocumentIngestionService:
     ) -> Dict[str, Any]:
         """
         Process a document and store embeddings in Pinecone.
-        
-        Args:
-            user_id: The user's unique identifier
-            file_content: Raw file content as bytes
-            filename: Name of the file
-            file_type: MIME type of the file
-            metadata: Additional metadata to store with embeddings
-            
-        Returns:
-            Processing result with document info
         """
         # Parse document to text
         text = self.parser.parse(file_content, file_type)
@@ -81,6 +73,15 @@ class DocumentIngestionService:
         # Upsert to Pinecone with user namespace
         upserted_count = pinecone_service.upsert_embeddings(user_id, vectors)
         
+        # Register document in MongoDB
+        await document_service.create_document(
+            user_id=user_id,
+            document_id=document_id,
+            filename=filename,
+            file_type=file_type,
+            metadata=metadata
+        )
+        
         logger.info(f"Ingested document {filename} with {upserted_count} vectors for user {user_id}")
         
         return {
@@ -91,7 +92,7 @@ class DocumentIngestionService:
             "user_id": user_id
         }
     
-    def process_text(
+    async def process_text(
         self,
         user_id: str,
         text: str,
@@ -100,15 +101,6 @@ class DocumentIngestionService:
     ) -> Dict[str, Any]:
         """
         Process raw text and store embeddings in Pinecone.
-        
-        Args:
-            user_id: The user's unique identifier
-            text: Raw text content
-            source_name: Name/identifier for the text source
-            metadata: Additional metadata to store with embeddings
-            
-        Returns:
-            Processing result with document info
         """
         if not text.strip():
             raise ValueError("Cannot process empty text")
@@ -145,6 +137,15 @@ class DocumentIngestionService:
         # Upsert to Pinecone with user namespace
         upserted_count = pinecone_service.upsert_embeddings(user_id, vectors)
         
+        # Register document in MongoDB
+        await document_service.create_document(
+            user_id=user_id,
+            document_id=document_id,
+            filename=source_name,
+            file_type="text/plain",
+            metadata=metadata
+        )
+        
         return {
             "document_id": document_id,
             "source": source_name,
@@ -153,17 +154,14 @@ class DocumentIngestionService:
             "user_id": user_id
         }
     
-    def delete_document(self, user_id: str, document_id: str) -> bool:
+    async def delete_document(self, user_id: str, document_id: str) -> bool:
         """
         Delete all vectors associated with a document.
-        
-        Args:
-            user_id: The user's unique identifier
-            document_id: The document ID to delete
-            
-        Returns:
-            True if deletion was successful
         """
+        # Delete from MongoDB
+        await document_service.delete_document(user_id, document_id)
+        
+        # Delete from Pinecone
         return pinecone_service.delete_embeddings(
             user_id=user_id,
             filter={"document_id": {"$eq": document_id}}

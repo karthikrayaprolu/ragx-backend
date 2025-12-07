@@ -81,4 +81,24 @@ class ChatHistoryService:
             {"$set": {"title": title, "updated_at": datetime.utcnow()}}
         )
 
+    async def get_total_queries(self, user_id: str) -> int:
+        """Count total number of user messages across all sessions."""
+        collection = await self.get_collection()
+        
+        # Aggregation to sum the length of 'messages' array for user's sessions
+        # Or simply count total sessions if that's what we want. 
+        # Requirement says "Total Queries", usually means individual messages.
+        pipeline = [
+            {"$match": {"user_id": user_id}},
+            {"$project": {"message_count": {"$size": "$messages"}}},
+            {"$group": {"_id": None, "total": {"$sum": "$message_count"}}}
+        ]
+        
+        cursor = collection.aggregate(pipeline)
+        result = await cursor.to_list(length=1)
+        
+        if result:
+            return result[0]["total"]
+        return 0
+
 chat_history_service = ChatHistoryService()

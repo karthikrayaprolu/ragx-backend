@@ -42,7 +42,7 @@ async def upload_document(
             raise HTTPException(status_code=400, detail="Empty file")
         
         # Process document
-        result = ingestion_service.process_document(
+        result = await ingestion_service.process_document(
             user_id=user_id,
             file_content=content,
             filename=file.filename,
@@ -69,7 +69,7 @@ async def upload_text(
     The text will be chunked, embedded, and stored in the user's namespace.
     """
     try:
-        result = ingestion_service.process_text(
+        result = await ingestion_service.process_text(
             user_id=user_id,
             text=request.text,
             source_name=request.source_name,
@@ -100,7 +100,7 @@ async def delete_document(
     Delete a document and all its embeddings.
     """
     try:
-        deleted = ingestion_service.delete_document(user_id, request.document_id)
+        deleted = await ingestion_service.delete_document(user_id, request.document_id)
         
         return DocumentDeleteResponse(
             document_id=request.document_id,
@@ -121,6 +121,10 @@ async def delete_all_documents(user_id: str = Depends(get_current_user_id)):
     try:
         deleted = pinecone_service.delete_user_namespace(user_id)
         
+        # Delete from MongoDB (Documents registry)
+        from app.services.document_service import document_service
+        await document_service.delete_all_documents(user_id)
+        
         return {
             "deleted": deleted,
             "message": "All documents deleted successfully" if deleted else "Failed to delete documents"
@@ -137,8 +141,24 @@ async def get_stats(user_id: str = Depends(get_current_user_id)):
     Get statistics about the user's stored documents.
     """
     try:
-        stats = pinecone_service.get_namespace_stats(user_id)
-        return NamespaceStats(**stats)
+        # Get vector stats from Pinecone
+        pinecone_stats = pinecone_service.get_namespace_stats(user_id)
+        
+        # Get document count from MongoDB
+        from app.services.document_service import document_service
+        total_documents = await document_service.get_document_count(user_id)
+        
+        # Get query count from Chat History
+        from app.services.chat_history import chat_history_service
+        query_count = await chat_history_service.get_total_queries(user_id)
+        
+        return NamespaceStats(
+            namespace=pinecone_stats["namespace"],
+            vector_count=pinecone_stats["vector_count"],
+            total_index_vectors=pinecone_stats["total_index_vectors"],
+            total_documents=total_documents,
+            query_count=query_count
+        )
     
     except Exception as e:
         logger.error(f"Error getting stats: {e}")

@@ -44,3 +44,5 @@ class NamespaceStats(BaseModel):
     namespace: str
     vector_count: int
     total_index_vectors: int
+    total_documents: int = 0
+    query_count: int = 0
