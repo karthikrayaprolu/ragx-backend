@@ -32,27 +32,11 @@ async def query_documents(
             query=request.query,
             top_k=request.top_k,
             filter=request.filter,
-            system_prompt=request.system_prompt
+            system_prompt=request.system_prompt,
+            session_id=request.session_id
         )
         
-        # Save history if session_id is provided
-        if request.session_id:
-            # Save user message
-            await chat_history_service.add_message(
-                request.session_id, 
-                user_id, 
-                Message(role="user", content=request.query)
-            )
-            # Save assistant message
-            await chat_history_service.add_message(
-                request.session_id, 
-                user_id, 
-                Message(
-                    role="assistant", 
-                    content=result["answer"],
-                    sources=[s.dict() for s in result["sources"]] if result.get("sources") else None
-                )
-            )
+        # History is now handled automatically by the RAGChain via MongoDB integration
         
         return ChatResponse(
             answer=result["answer"],
@@ -76,14 +60,6 @@ async def stream_query(
     Returns a streaming response with chunks of the AI-generated answer.
     """
     try:
-        # Save user message if session_id is provided
-        if request.session_id:
-            await chat_history_service.add_message(
-                request.session_id, 
-                user_id, 
-                Message(role="user", content=request.query)
-            )
-
         async def generate():
             full_answer = ""
             for chunk in rag_chain.query_stream(
@@ -91,20 +67,15 @@ async def stream_query(
                 query=request.query,
                 top_k=request.top_k,
                 filter=request.filter,
-                system_prompt=request.system_prompt
+                system_prompt=request.system_prompt,
+                session_id=request.session_id
             ):
                 full_answer += chunk
                 yield f"data: {json.dumps({'content': chunk})}\n\n"
             
             yield f"data: {json.dumps({'content': '', 'done': True})}\n\n"
-
-            # Save assistant message if session_id is provided
-            if request.session_id:
-                await chat_history_service.add_message(
-                    request.session_id, 
-                    user_id, 
-                    Message(role="assistant", content=full_answer)
-                )
+            
+            # History is now handled automatically by the RAGChain via MongoDB integration
         
         return StreamingResponse(
             generate(),

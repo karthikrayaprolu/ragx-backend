@@ -1,4 +1,7 @@
-from openai import OpenAI
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_mongodb import MongoDBChatMessageHistory
 from typing import List, Dict, Any, Optional, Generator
 from app.core.config import settings
 from app.rag.embeddings import embedding_service
@@ -8,17 +11,47 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def get_session_history(session_id: str):
+    """
+    Factory function to get MongoDB chat history for a session.
+    """
+    return MongoDBChatMessageHistory(
+        connection_string=settings.MONGO_URI,
+        session_id=session_id,
+        database_name=settings.MONGO_DB_NAME,
+        collection_name="chat_history"
+    )
+
+
 class RAGChain:
-    """RAG chain for querying user-specific documents and generating responses using OpenRouter."""
+    """RAG chain for querying user-specific documents ensuring chat history is maintained in MongoDB."""
     
     def __init__(self):
-        # Use OpenRouter API (OpenAI-compatible)
-        self.client = OpenAI(
-            base_url=settings.OPENROUTER_BASE_URL,
-            api_key=settings.OPENROUTER_API_KEY
+        # Initialize Chat Model
+        self.llm = ChatOpenAI(
+            model=settings.LLM_MODEL,
+            temperature=settings.LLM_TEMPERATURE,
+            api_key=settings.OPENROUTER_API_KEY,
+            base_url=settings.OPENROUTER_BASE_URL
         )
-        self.model = settings.LLM_MODEL
-        self.temperature = settings.LLM_TEMPERATURE
+        
+        # Define Prompt Template
+        self.prompt = ChatPromptTemplate.from_messages([
+            ("system", "{system_prompt}"),
+            MessagesPlaceholder(variable_name="history"),
+            ("human", "Context:\n{context}\n\nQuestion: {question}"),
+        ])
+        
+        # Create Basic Chain
+        self.chain = self.prompt | self.llm
+        
+        # Wrap with History Support
+        self.chain_with_history = RunnableWithMessageHistory(
+            self.chain,
+            get_session_history,
+            input_messages_key="question",
+            history_messages_key="history",
+        )
     
     def _retrieve_context(
         self,
@@ -27,18 +60,7 @@ class RAGChain:
         top_k: int = 5,
         filter: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
-        """
-        Retrieve relevant context from user's documents.
-        
-        Args:
-            user_id: The user's unique identifier
-            query: The user's query
-            top_k: Number of relevant chunks to retrieve
-            filter: Optional metadata filter
-            
-        Returns:
-            List of relevant document chunks with metadata
-        """
+        """Retrieve relevant context from user's documents."""
         # Generate query embedding
         query_embedding = embedding_service.generate_embedding(query)
         
@@ -77,20 +99,11 @@ class RAGChain:
         query: str,
         top_k: int = 5,
         filter: Optional[Dict[str, Any]] = None,
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        session_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Query user's documents and generate a response.
-        
-        Args:
-            user_id: The user's unique identifier
-            query: The user's question
-            top_k: Number of relevant chunks to retrieve
-            filter: Optional metadata filter
-            system_prompt: Optional custom system prompt
-            
-        Returns:
-            Response with answer and source documents
+        Query user's documents and generate a response with history context.
         """
         # Retrieve relevant context
         results = self._retrieve_context(user_id, query, top_k, filter)
@@ -99,28 +112,32 @@ class RAGChain:
         # Default system prompt
         if not system_prompt:
             system_prompt = """You are a helpful assistant that answers questions based on the provided context. 
+            Answer based ONLY on the provided context. If the context doesn't contain relevant information, say so clearly."""
+        
+        # Determine invocation
+        input_data = {
+            "question": query,
+            "context": context,
+            "system_prompt": system_prompt
+        }
+        
+        if session_id:
+            # Use chain with history
+            response = self.chain_with_history.invoke(
+                input_data,
+                config={"configurable": {"session_id": session_id}}
+            )
+        else:
+            # Fallback to stateless chain if no session_id
+            response = self.chain.invoke({
+                **input_data,
+                "history": [] # Empty history
+            })
             
-Rules:
-- Answer based ONLY on the provided context
-- If the context doesn't contain relevant information, say so clearly
-- Cite your sources when possible
-- Be concise but thorough
-- If you're unsure, express uncertainty"""
+        answer = response.content
         
-        # Build messages
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {query}"}
-        ]
-        
-        # Generate response
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=self.temperature
-        )
-        
-        answer = response.choices[0].message.content
+        # Extract usage if available
+        usage = response.response_metadata.get("token_usage", {})
         
         return {
             "answer": answer,
@@ -133,9 +150,9 @@ Rules:
                 for r in results
             ],
             "tokens_used": {
-                "prompt": response.usage.prompt_tokens,
-                "completion": response.usage.completion_tokens,
-                "total": response.usage.total_tokens
+                "prompt": usage.get("prompt_tokens", 0),
+                "completion": usage.get("completion_tokens", 0),
+                "total": usage.get("total_tokens", 0)
             }
         }
     
@@ -145,20 +162,11 @@ Rules:
         query: str,
         top_k: int = 5,
         filter: Optional[Dict[str, Any]] = None,
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        session_id: Optional[str] = None
     ) -> Generator[str, None, None]:
         """
-        Stream query response for real-time output.
-        
-        Args:
-            user_id: The user's unique identifier
-            query: The user's question
-            top_k: Number of relevant chunks to retrieve
-            filter: Optional metadata filter
-            system_prompt: Optional custom system prompt
-            
-        Yields:
-            Response chunks as they're generated
+        Stream query response with history context.
         """
         # Retrieve relevant context
         results = self._retrieve_context(user_id, query, top_k, filter)
@@ -166,24 +174,28 @@ Rules:
         
         if not system_prompt:
             system_prompt = """You are a helpful assistant that answers questions based on the provided context. 
-Answer based ONLY on the provided context. If the context doesn't contain relevant information, say so clearly."""
+            Answer based ONLY on the provided context. If the context doesn't contain relevant information, say so clearly."""
         
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {query}"}
-        ]
+        input_data = {
+            "question": query,
+            "context": context,
+            "system_prompt": system_prompt
+        }
         
-        # Stream response
-        stream = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=self.temperature,
-            stream=True
-        )
+        if session_id:
+            stream = self.chain_with_history.stream(
+                input_data,
+                config={"configurable": {"session_id": session_id}}
+            )
+        else:
+            stream = self.chain.stream({
+                **input_data,
+                "history": []
+            })
         
         for chunk in stream:
-            if chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+            if chunk.content:
+                yield chunk.content
 
 
 # Singleton instance

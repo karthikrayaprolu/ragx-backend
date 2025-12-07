@@ -1,2 +1,5 @@
 /venv
 /rag-x-firebase-credentials.json
+/.env
+/__pycache__/
+*.pyc
