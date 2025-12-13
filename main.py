@@ -67,5 +67,6 @@ if __name__ == "__main__":
     import uvicorn
     import os
     
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    # Render sets PORT environment variable, default to 10000
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
