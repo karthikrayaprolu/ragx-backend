@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1 import auth, chat, upload, chat_history
+from app.api.v1 import auth, chat, upload, chat_history, payments
 
 api_router = APIRouter()
 
@@ -8,3 +8,4 @@ api_router.include_router(auth.router)
 api_router.include_router(chat.router)
 api_router.include_router(upload.router)
 api_router.include_router(chat_history.router)
+api_router.include_router(payments.router)

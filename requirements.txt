@@ -34,3 +34,4 @@ motor
 dnspython
 langchain-mongodb 
 pymongo 
+stripe
