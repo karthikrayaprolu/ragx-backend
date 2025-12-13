@@ -27,13 +27,22 @@ async def query_documents(
     and relevant context is used to generate a response.
     """
     try:
-        result = rag_chain.query(
+        # Create session if not provided
+        session_id = request.session_id
+        if not session_id:
+            session = await chat_history_service.create_session(
+                user_id=user_id,
+                title=request.query[:50] + ("..." if len(request.query) > 50 else "")
+            )
+            session_id = session.id
+        
+        result = await rag_chain.query(
             user_id=user_id,
             query=request.query,
             top_k=request.top_k,
             filter=request.filter,
             system_prompt=request.system_prompt,
-            session_id=request.session_id
+            session_id=session_id
         )
         
         # History is now handled automatically by the RAGChain via MongoDB integration
@@ -60,15 +69,24 @@ async def stream_query(
     Returns a streaming response with chunks of the AI-generated answer.
     """
     try:
+        # Create session if not provided
+        session_id = request.session_id
+        if not session_id:
+            session = await chat_history_service.create_session(
+                user_id=user_id,
+                title=request.query[:50] + ("..." if len(request.query) > 50 else "")
+            )
+            session_id = session.id
+        
         async def generate():
             full_answer = ""
-            for chunk in rag_chain.query_stream(
+            async for chunk in rag_chain.query_stream(
                 user_id=user_id,
                 query=request.query,
                 top_k=request.top_k,
                 filter=request.filter,
                 system_prompt=request.system_prompt,
-                session_id=request.session_id
+                session_id=session_id
             ):
                 full_answer += chunk
                 yield f"data: {json.dumps({'content': chunk})}\n\n"

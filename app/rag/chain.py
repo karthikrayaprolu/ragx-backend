@@ -6,7 +6,9 @@ from typing import List, Dict, Any, Optional, Generator
 from app.core.config import settings
 from app.rag.embeddings import embedding_service
 from app.services.vector_db import pinecone_service
+from app.schemas.chat_history import Message
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +95,7 @@ class RAGChain:
         
         return "\n\n".join(context_parts)
     
-    def query(
+    async def query(
         self,
         user_id: str,
         query: str,
@@ -139,16 +141,40 @@ class RAGChain:
         # Extract usage if available
         usage = response.response_metadata.get("token_usage", {})
         
+        sources = [
+            {
+                "filename": r.get("metadata", {}).get("filename") or r.get("metadata", {}).get("source"),
+                "score": r.get("score"),
+                "text_preview": r.get("metadata", {}).get("text", "")[:200]
+            }
+            for r in results
+        ]
+        
+        # Save messages to chat_sessions collection
+        if session_id:
+            from app.services.chat_history import chat_history_service
+            from datetime import datetime
+            
+            # Add user message
+            user_message = Message(
+                role="user",
+                content=query,
+                timestamp=datetime.utcnow()
+            )
+            await chat_history_service.add_message(session_id, user_id, user_message)
+            
+            # Add assistant message
+            assistant_message = Message(
+                role="assistant",
+                content=answer,
+                timestamp=datetime.utcnow(),
+                sources=sources
+            )
+            await chat_history_service.add_message(session_id, user_id, assistant_message)
+        
         return {
             "answer": answer,
-            "sources": [
-                {
-                    "filename": r.get("metadata", {}).get("filename") or r.get("metadata", {}).get("source"),
-                    "score": r.get("score"),
-                    "text_preview": r.get("metadata", {}).get("text", "")[:200]
-                }
-                for r in results
-            ],
+            "sources": sources,
             "tokens_used": {
                 "prompt": usage.get("prompt_tokens", 0),
                 "completion": usage.get("completion_tokens", 0),
@@ -156,7 +182,7 @@ class RAGChain:
             }
         }
     
-    def query_stream(
+    async def query_stream(
         self,
         user_id: str,
         query: str,
@@ -164,9 +190,10 @@ class RAGChain:
         filter: Optional[Dict[str, Any]] = None,
         system_prompt: Optional[str] = None,
         session_id: Optional[str] = None
-    ) -> Generator[str, None, None]:
+    ):
         """
         Stream query response with history context.
+        Returns tuple of (generator, results) for saving messages after streaming.
         """
         # Retrieve relevant context
         results = self._retrieve_context(user_id, query, top_k, filter)
@@ -193,9 +220,43 @@ class RAGChain:
                 "history": []
             })
         
+        # Collect chunks and yield them
+        full_response = ""
         for chunk in stream:
             if chunk.content:
+                full_response += chunk.content
                 yield chunk.content
+        
+        # Save messages to chat_sessions collection after streaming
+        if session_id:
+            from app.services.chat_history import chat_history_service
+            from datetime import datetime
+            
+            sources = [
+                {
+                    "filename": r.get("metadata", {}).get("filename") or r.get("metadata", {}).get("source"),
+                    "score": r.get("score"),
+                    "text_preview": r.get("metadata", {}).get("text", "")[:200]
+                }
+                for r in results
+            ]
+            
+            # Add user message
+            user_message = Message(
+                role="user",
+                content=query,
+                timestamp=datetime.utcnow()
+            )
+            await chat_history_service.add_message(session_id, user_id, user_message)
+            
+            # Add assistant message
+            assistant_message = Message(
+                role="assistant",
+                content=full_response,
+                timestamp=datetime.utcnow(),
+                sources=sources
+            )
+            await chat_history_service.add_message(session_id, user_id, assistant_message)
 
 
 # Singleton instance

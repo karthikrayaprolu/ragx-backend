@@ -35,3 +35,4 @@ dnspython
 langchain-mongodb 
 pymongo 
 stripe
+langchain_mongodb
