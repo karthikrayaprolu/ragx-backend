@@ -13,6 +13,12 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+# Add imports for API Key support
+from app.db.mongo import get_database
+import secrets
+from datetime import datetime
+from fastapi import Body
+
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 # Initialize Firebase Admin SDK
@@ -74,7 +80,8 @@ TEST_USER_ID = "test_user_123"
 
 async def get_current_user_id(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    x_test_user: Optional[str] = Header(None)
+    x_test_user: Optional[str] = Header(None),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key")
 ) -> str:
     """
     Verify Firebase ID token and return user ID.
@@ -90,6 +97,9 @@ async def get_current_user_id(
             return x_test_user
         return TEST_USER_ID
     
+
+
+    
     # Check if Firebase is initialized
     if not firebase_initialized:
         logger.error("Firebase Admin SDK not initialized")
@@ -98,6 +108,18 @@ async def get_current_user_id(
             detail="Authentication service not configured"
         )
     
+    
+    # 3. Check for API Key
+    if x_api_key:
+        try:
+            db = await get_database()
+            key_doc = await db.api_keys.find_one({"key": x_api_key})
+            if key_doc:
+                return key_doc["user_id"]
+        except Exception as e:
+            logger.error(f"Error validating API key: {e}")
+            pass # Fall through to Bearer check
+
     if not credentials:
         raise HTTPException(
             status_code=401,
@@ -179,3 +201,41 @@ async def get_current_user(user_id: str = Depends(get_current_user_id)):
     except Exception as e:
         logger.error(f"Error getting user: {e}")
         raise HTTPException(status_code=404, detail="User not found")
+
+
+# API Key Management
+@router.post("/api-key")
+async def generate_api_key(user_id: str = Depends(get_current_user_id)):
+    """Generate or regenerate an API Key for the user."""
+    db = await get_database()
+    
+    # Generate a secure key
+    new_key = f"ragx_{secrets.token_urlsafe(32)}"
+    
+    # Store in DB (upsert)
+    await db.api_keys.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "key": new_key, 
+            "user_id": user_id, 
+            "updated_at": datetime.utcnow(),
+            "created_at": datetime.utcnow()
+        }},
+        upsert=True
+    )
+    
+    return {"api_key": new_key}
+
+@router.get("/api-key")
+async def get_api_key_endpoint(user_id: str = Depends(get_current_user_id)):
+    """Get the current API Key for the user."""
+    db = await get_database()
+    
+    key_doc = await db.api_keys.find_one({"user_id": user_id})
+    
+    if not key_doc:
+        # Auto-generate if not exists
+        return await generate_api_key(user_id=user_id)
+        
+    return {"api_key": key_doc["key"]}
+
