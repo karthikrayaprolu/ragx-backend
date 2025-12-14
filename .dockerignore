@@ -1,0 +1,21 @@
+# Git and Docker
+.git
+.gitignore
+.dockerignore
+Dockerfile
+render.yaml
+README.md
+SECURITY.md
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env
+
+# Data
+rag-x-firebase-credentials.json
