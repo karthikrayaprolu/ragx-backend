@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     # Pinecone Configuration
-    PINECONE_API_KEY: str
+    PINECONE_API_KEY: Optional[str] = None
     PINECONE_INDEX_NAME: str = "ragster-index"
     
     # MongoDB Configuration
@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     MONGO_DB_NAME: str = "ragx"
     
     # OpenRouter Configuration (Free OpenAI-compatible API)
-    OPENROUTER_API_KEY: str
+    OPENROUTER_API_KEY: Optional[str] = None
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     
     # Model Configuration

@@ -21,6 +21,26 @@ def init_firebase():
     if firebase_admin._apps:
         return True
     
+    firebase_creds_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
+    
+    # 1. Try loading from JSON string in environment variable (Best for Cloud)
+    if firebase_creds_json:
+        try:
+            # Check if it's already a dict or needs parsing
+            import json
+            if isinstance(firebase_creds_json, str):
+                creds_dict = json.loads(firebase_creds_json)
+            else:
+                creds_dict = firebase_creds_json
+                
+            cred = credentials.Certificate(creds_dict)
+            firebase_admin.initialize_app(cred)
+            logger.info("Firebase Admin SDK initialized from FIREBASE_CREDENTIALS_JSON")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to initialize Firebase from JSON env var: {e}")
+
+    # 2. Fallback to file path
     firebase_creds_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "rag-x-firebase-credentials.json")
     
     # Try different possible paths
@@ -40,7 +60,7 @@ def init_firebase():
             except Exception as e:
                 logger.error(f"Failed to initialize Firebase with {path}: {e}")
     
-    logger.warning(f"Firebase credentials not found. Tried: {possible_paths}")
+    logger.warning(f"Firebase credentials not found. Tried env var and paths: {possible_paths}")
     return False
 
 # Initialize Firebase on module load
