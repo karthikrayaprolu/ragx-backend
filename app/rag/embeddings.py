@@ -17,9 +17,15 @@ class EmbeddingService:
     def __init__(self):
         # Using all-MiniLM-L6-v2 - fast, good quality, 384 dimensions
         # Or use all-mpnet-base-v2 for better quality (768 dimensions)
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        self.model = None
         self.dimension = 384  # Matches the model output
-        logger.info("Loaded embedding model: all-MiniLM-L6-v2")
+    
+    def _get_model(self):
+        if self.model is None:
+            logger.info("Loading embedding model...")
+            self.model = SentenceTransformer('all-MiniLM-L6-v2')
+            logger.info("Loaded embedding model: all-MiniLM-L6-v2")
+        return self.model
     
     def generate_embedding(self, text: str) -> List[float]:
         """
@@ -36,7 +42,8 @@ class EmbeddingService:
         if not text:
             raise ValueError("Cannot generate embedding for empty text")
         
-        embedding = self.model.encode(text, convert_to_numpy=True)
+        model = self._get_model()
+        embedding = model.encode(text, convert_to_numpy=True)
         return embedding.tolist()
     
     def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
@@ -56,7 +63,8 @@ class EmbeddingService:
         if not cleaned_texts:
             return []
         
-        embeddings = self.model.encode(cleaned_texts, convert_to_numpy=True)
+        model = self._get_model()
+        embeddings = model.encode(cleaned_texts, convert_to_numpy=True)
         return [emb.tolist() for emb in embeddings]
 
 

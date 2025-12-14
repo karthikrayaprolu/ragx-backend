@@ -10,11 +10,19 @@ class PineconeService:
     """Service for managing Pinecone vector database operations with user-specific namespaces."""
     
     def __init__(self):
-        self.pc = Pinecone(api_key=settings.PINECONE_API_KEY)
+        self.pc = None
+        self.index = None
         self.index_name = settings.PINECONE_INDEX_NAME
-        self._ensure_index_exists()
-        self.index = self.pc.Index(self.index_name)
     
+    def _ensure_initialized(self):
+        """Lazy initialization of Pinecone client and index."""
+        if self.pc is None:
+            logger.info("Initializing Pinecone service...")
+            self.pc = Pinecone(api_key=settings.PINECONE_API_KEY)
+            self._ensure_index_exists()
+            self.index = self.pc.Index(self.index_name)
+            logger.info("Pinecone service initialized.")
+
     def _ensure_index_exists(self):
         """Create the index if it doesn't exist."""
         existing_indexes = [index.name for index in self.pc.list_indexes()]
@@ -55,6 +63,7 @@ class PineconeService:
         Returns:
             Number of vectors upserted
         """
+        self._ensure_initialized()
         namespace = self._get_user_namespace(user_id)
         total_upserted = 0
         
@@ -87,6 +96,7 @@ class PineconeService:
         Returns:
             List of matching documents with scores
         """
+        self._ensure_initialized()
         namespace = self._get_user_namespace(user_id)
         
         results = self.index.query(
@@ -125,6 +135,7 @@ class PineconeService:
         Returns:
             True if deletion was successful
         """
+        self._ensure_initialized()
         namespace = self._get_user_namespace(user_id)
         
         try:
@@ -143,6 +154,7 @@ class PineconeService:
     
     def get_namespace_stats(self, user_id: str) -> Dict[str, Any]:
         """Get statistics for a user's namespace."""
+        self._ensure_initialized()
         namespace = self._get_user_namespace(user_id)
         stats = self.index.describe_index_stats()
         
@@ -155,6 +167,7 @@ class PineconeService:
     
     def delete_user_namespace(self, user_id: str) -> bool:
         """Delete all vectors in a user's namespace."""
+        # delete_embeddings calls _ensure_initialized, so we are good
         return self.delete_embeddings(user_id, delete_all=True)
 
 
