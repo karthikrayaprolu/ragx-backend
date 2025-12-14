@@ -1,6 +1,3 @@
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_mongodb import MongoDBChatMessageHistory
 from typing import List, Dict, Any, Optional, Generator
 from app.core.config import settings
@@ -29,31 +26,46 @@ class RAGChain:
     """RAG chain for querying user-specific documents ensuring chat history is maintained in MongoDB."""
     
     def __init__(self):
-        # Initialize Chat Model
-        self.llm = ChatOpenAI(
-            model=settings.LLM_MODEL,
-            temperature=settings.LLM_TEMPERATURE,
-            api_key=settings.OPENROUTER_API_KEY,
-            base_url=settings.OPENROUTER_BASE_URL
-        )
-        
-        # Define Prompt Template
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", "{system_prompt}"),
-            MessagesPlaceholder(variable_name="history"),
-            ("human", "Context:\n{context}\n\nQuestion: {question}"),
-        ])
-        
-        # Create Basic Chain
-        self.chain = self.prompt | self.llm
-        
-        # Wrap with History Support
-        self.chain_with_history = RunnableWithMessageHistory(
-            self.chain,
-            get_session_history,
-            input_messages_key="question",
-            history_messages_key="history",
-        )
+        self.llm = None
+        self.prompt = None
+        self.chain = None
+        self.chain_with_history = None
+
+    def _ensure_initialized(self):
+        """Lazy initialization of RAG chain components."""
+        if self.chain_with_history is None:
+            logger.info("Initializing RAGChain components...")
+            # Import here to avoid heavy startup cost
+            from langchain_openai import ChatOpenAI
+            from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+            from langchain_core.runnables.history import RunnableWithMessageHistory
+            
+            # Initialize Chat Model
+            self.llm = ChatOpenAI(
+                model=settings.LLM_MODEL,
+                temperature=settings.LLM_TEMPERATURE,
+                api_key=settings.OPENROUTER_API_KEY,
+                base_url=settings.OPENROUTER_BASE_URL
+            )
+            
+            # Define Prompt Template
+            self.prompt = ChatPromptTemplate.from_messages([
+                ("system", "{system_prompt}"),
+                MessagesPlaceholder(variable_name="history"),
+                ("human", "Context:\n{context}\n\nQuestion: {question}"),
+            ])
+            
+            # Create Basic Chain
+            self.chain = self.prompt | self.llm
+            
+            # Wrap with History Support
+            self.chain_with_history = RunnableWithMessageHistory(
+                self.chain,
+                get_session_history,
+                input_messages_key="question",
+                history_messages_key="history",
+            )
+            logger.info("RAGChain initialized.")
     
     def _retrieve_context(
         self,
@@ -107,6 +119,8 @@ class RAGChain:
         """
         Query user's documents and generate a response with history context.
         """
+        self._ensure_initialized()
+        
         # Retrieve relevant context
         results = self._retrieve_context(user_id, query, top_k, filter)
         context = self._build_context_prompt(results)
@@ -195,6 +209,8 @@ class RAGChain:
         Stream query response with history context.
         Returns tuple of (generator, results) for saving messages after streaming.
         """
+        self._ensure_initialized()
+        
         # Retrieve relevant context
         results = self._retrieve_context(user_id, query, top_k, filter)
         context = self._build_context_prompt(results)

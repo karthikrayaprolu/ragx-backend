@@ -1,4 +1,3 @@
-from sentence_transformers import SentenceTransformer
 from typing import List
 from app.core.config import settings
 import logging
@@ -22,6 +21,7 @@ class EmbeddingService:
     
     def _get_model(self):
         if self.model is None:
+            from sentence_transformers import SentenceTransformer
             logger.info("Loading embedding model...")
             self.model = SentenceTransformer('all-MiniLM-L6-v2')
             logger.info("Loaded embedding model: all-MiniLM-L6-v2")

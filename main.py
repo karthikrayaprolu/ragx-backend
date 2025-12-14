@@ -11,7 +11,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+import os
+import sys
+
 # Create FastAPI app
+logger.info(f"Starting application on port {os.environ.get('PORT', 'unknown')}...")
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="RAG-powered document Q&A API with user-specific embeddings",
@@ -60,6 +64,7 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
+    logger.info(f"Health check called. PORT: {os.environ.get('PORT')}")
     return {"status": "healthy"}
 
 

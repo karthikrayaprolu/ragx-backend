@@ -1,4 +1,3 @@
-from pinecone import Pinecone, ServerlessSpec
 from typing import List, Dict, Any, Optional
 from app.core.config import settings
 import logging
@@ -17,6 +16,7 @@ class PineconeService:
     def _ensure_initialized(self):
         """Lazy initialization of Pinecone client and index."""
         if self.pc is None:
+            from pinecone import Pinecone, ServerlessSpec
             logger.info("Initializing Pinecone service...")
             self.pc = Pinecone(api_key=settings.PINECONE_API_KEY)
             self._ensure_index_exists()
@@ -25,6 +25,7 @@ class PineconeService:
 
     def _ensure_index_exists(self):
         """Create the index if it doesn't exist."""
+        from pinecone import ServerlessSpec
         existing_indexes = [index.name for index in self.pc.list_indexes()]
         
         if self.index_name not in existing_indexes:
