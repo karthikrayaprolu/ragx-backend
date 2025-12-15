@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Depends, Header, Query
+from fastapi import APIRouter, HTTPException, Depends, Header, Query, Body
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel
 from typing import Optional
 import firebase_admin
 from firebase_admin import auth, credentials
@@ -245,11 +246,65 @@ async def debug_user_plan(user_id: str = Depends(get_current_user_id)):
         }
 
 
-# API Key Management
+
+class UserProfileUpdate(BaseModel):
+    display_name: Optional[str] = None
+    photo_url: Optional[str] = None
+
+@router.patch("/me")
+@router.post("/me")
+@router.post("/me/")
+async def update_profile(
+    update_data: UserProfileUpdate,
+    user_id: str = Depends(get_current_user_id)
+):
+    """Update current user profile (username, photo)."""
+    try:
+        db = await get_database()
+        
+        update_fields = {}
+        if update_data.display_name is not None:
+            update_fields["display_name"] = update_data.display_name
+        if update_data.photo_url is not None:
+            update_fields["photo_url"] = update_data.photo_url
+            
+        if not update_fields:
+            return {"message": "No changes requested"}
+
+        update_fields["updated_at"] = datetime.utcnow()
+
+        # Update MongoDB
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": update_fields},
+            upsert=True
+        )
+        
+        # Try to update Firebase Auth as well
+        try:
+            auth_update = {}
+            if update_data.display_name:
+                auth_update["display_name"] = update_data.display_name
+            if update_data.photo_url:
+                auth_update["photo_url"] = update_data.photo_url
+            
+            if auth_update:
+                auth.update_user(user_id, **auth_update)
+        except Exception as e:
+            logger.warning(f"Failed to update Firebase Auth profile: {e}")
+            
+        return {"message": "Profile updated successfully"}
+
+    except Exception as e:
+        logger.error(f"Error updating profile: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update profile")
+
+# API Key Management (existing code...)
 @router.post("/api-key")
 async def generate_api_key(user_id: str = Depends(get_current_user_id)):
     """Generate or regenerate an API Key for the user."""
     db = await get_database()
+
     
     # Generate a secure key
     new_key = f"ragx_{secrets.token_urlsafe(32)}"
