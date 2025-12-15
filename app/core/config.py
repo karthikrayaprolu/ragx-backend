@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     PINECONE_INDEX_NAME: str = "ragster-index"
     
     # MongoDB Configuration
-    MONGO_URI: str = "mongodb+srv://ragx:ragx@ragx.4jl5sux.mongodb.net/?retryWrites=true&w=majority"
+    MONGO_URI: str
     MONGO_DB_NAME: str = "ragx"
     
     # OpenRouter Configuration (Free OpenAI-compatible API)
@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # API Configuration
     API_V1_PREFIX: str = "/api/v1"
     PROJECT_NAME: str = "Ragster"
+    
+    # Frontend Configuration
+    FRONTEND_URL: str = "https://rag-x.vercel.app"  # Override with production URL in env
     
     # Testing Configuration
     TEST_MODE: bool = False

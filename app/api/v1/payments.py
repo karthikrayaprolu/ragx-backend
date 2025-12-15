@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import stripe
 import os
 from app.core.config import settings
+from typing import Optional
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -12,13 +13,18 @@ stripe.api_key = os.getenv("STRIPE_SECRET_KEY", settings.STRIPE_SECRET_KEY if ha
 
 class CheckoutSessionRequest(BaseModel):
     priceId: str
-    successUrl: str = "http://localhost:3000/dashboard?success=true"
-    cancelUrl: str = "http://localhost:3000/pricing?canceled=true"
+    successUrl: Optional[str] = None
+    cancelUrl: Optional[str] = None
 
 @router.post("/create-checkout-session")
 async def create_checkout_session(request: CheckoutSessionRequest):
     if not stripe.api_key:
         raise HTTPException(status_code=500, detail="Stripe API key not configured")
+    
+    # Use provided URLs or fall back to environment-configured frontend URL
+    frontend_url = settings.FRONTEND_URL
+    success_url = request.successUrl or f"{frontend_url}/dashboard?success=true"
+    cancel_url = request.cancelUrl or f"{frontend_url}/pricing?canceled=true"
     
     try:
         checkout_session = stripe.checkout.Session.create(
@@ -30,8 +36,8 @@ async def create_checkout_session(request: CheckoutSessionRequest):
                 },
             ],
             mode='subscription', # Assuming subscription based on "month" pricing
-            success_url=request.successUrl,
-            cancel_url=request.cancelUrl,
+            success_url=success_url,
+            cancel_url=cancel_url,
         )
         return {"url": checkout_session.url}
     except Exception as e:
