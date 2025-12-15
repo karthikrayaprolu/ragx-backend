@@ -7,6 +7,10 @@ class UserBase(BaseModel):
     """Base user model."""
     email: EmailStr
     display_name: Optional[str] = None
+    plan: Optional[str] = "free"  # free, pro, business
+    stripe_customer_id: Optional[str] = None
+    stripe_subscription_id: Optional[str] = None
+    subscription_status: Optional[str] = None  # active, canceled, past_due, etc.
 
 
 class UserCreate(UserBase):

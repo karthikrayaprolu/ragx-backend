@@ -188,15 +188,30 @@ async def verify_token(user_id: str = Depends(get_current_user_id)):
 
 @router.get("/me")
 async def get_current_user(user_id: str = Depends(get_current_user_id)):
-    """Get current user information."""
+    """Get current user information including subscription details."""
     try:
+        # Get Firebase user data
         user = auth.get_user(user_id)
+        
+        # Get subscription data from MongoDB
+        db = await get_database()
+        user_doc = await db.users.find_one({"user_id": user_id})
+        
+        plan = "free"
+        subscription_status = None
+        
+        if user_doc:
+            plan = user_doc.get("plan", "free")
+            subscription_status = user_doc.get("subscription_status")
+        
         return {
             "uid": user.uid,
             "email": user.email,
             "display_name": user.display_name,
             "photo_url": user.photo_url,
-            "email_verified": user.email_verified
+            "email_verified": user.email_verified,
+            "plan": plan,
+            "subscription_status": subscription_status
         }
     except Exception as e:
         logger.error(f"Error getting user: {e}")

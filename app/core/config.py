@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     # Frontend Configuration
     FRONTEND_URL: str = "https://rag-x.vercel.app"  # Override with production URL in env
     
+    # Stripe Configuration
+    STRIPE_SECRET_KEY: Optional[str] = None
+    STRIPE_WEBHOOK_SECRET: Optional[str] = None
+    
     # Testing Configuration
     TEST_MODE: bool = False
     
