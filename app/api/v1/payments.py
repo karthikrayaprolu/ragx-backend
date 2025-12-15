@@ -127,28 +127,30 @@ async def handle_checkout_session_completed(session):
     customer_id = session.get('customer')
     subscription_id = session.get('subscription')
     
+    # Map actual Stripe price IDs to plan names
+    PRICE_ID_TO_PLAN = {
+        'price_1SdltnRu2lPW20DirecI5Ata': 'starter',
+        'price_1Sdlu6Ru2lPW20DiERsErBf5': 'pro',
+    }
+    
     # Get subscription details to determine the plan
-    plan = "pro"  # Default
+    plan = "pro"  # Default to pro if we can't determine
     if subscription_id:
         try:
             subscription = stripe.Subscription.retrieve(subscription_id)
             # Get the price ID from the subscription
             if subscription.items.data:
                 price_id = subscription.items.data[0].price.id
-                # Map price IDs to plan names
-                if 'starter' in price_id.lower():
-                    plan = "starter"
-                elif 'pro' in price_id.lower():
-                    plan = "pro"
-                elif 'business' in price_id.lower():
-                    plan = "business"
+                # Map price ID to plan name
+                plan = PRICE_ID_TO_PLAN.get(price_id, "pro")
+                logger.info(f"Detected plan '{plan}' from price_id '{price_id}'")
         except Exception as e:
             logger.error(f"Error retrieving subscription: {e}")
     
     db = await get_database()
     
     # Update user with subscription info
-    await db.users.update_one(
+    result = await db.users.update_one(
         {"user_id": user_id},
         {
             "$set": {
@@ -162,7 +164,7 @@ async def handle_checkout_session_completed(session):
         upsert=True
     )
     
-    logger.info(f"Updated user {user_id} with {plan} plan")
+    logger.info(f"Updated user {user_id} with {plan} plan (matched: {result.matched_count}, modified: {result.modified_count}, upserted: {result.upserted_id})")
 
 
 async def handle_subscription_updated(subscription):
