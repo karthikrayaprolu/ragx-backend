@@ -127,8 +127,10 @@ class RAGChain:
         
         # Default system prompt
         if not system_prompt:
-            system_prompt = """You are a helpful assistant that answers questions based on the provided context. 
-            Answer based ONLY on the provided context. If the context doesn't contain relevant information, say so clearly."""
+            system_prompt = """You are a helpful assistant. 
+            Use the provided context to answer questions about the user's documents.
+            If the user's input is a greeting (e.g., "hello", "hi") or simple conversation, respond politely and naturally without needing context.
+            For specific questions, answer based ONLY on the provided context. If the context doesn't contain relevant information, say so clearly."""
         
         # Determine invocation
         input_data = {
@@ -216,8 +218,10 @@ class RAGChain:
         context = self._build_context_prompt(results)
         
         if not system_prompt:
-            system_prompt = """You are a helpful assistant that answers questions based on the provided context. 
-            Answer based ONLY on the provided context. If the context doesn't contain relevant information, say so clearly."""
+            system_prompt = """You are a helpful assistant. 
+            Use the provided context to answer questions about the user's documents.
+            If the user's input is a greeting (e.g., "hello", "hi") or simple conversation, respond politely and naturally without needing context.
+            For specific questions, answer based ONLY on the provided context. If the context doesn't contain relevant information, say so clearly."""
         
         input_data = {
             "question": query,
