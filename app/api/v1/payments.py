@@ -124,6 +124,8 @@ async def handle_checkout_session_completed(session):
         logger.error("No user_id found in checkout session")
         return
     
+    logger.info(f"Processing checkout for user_id: {user_id}")
+    
     customer_id = session.get('customer')
     subscription_id = session.get('subscription')
     
@@ -149,6 +151,10 @@ async def handle_checkout_session_completed(session):
     
     db = await get_database()
     
+    # First, check if user already exists
+    existing_user = await db.users.find_one({"user_id": user_id})
+    logger.info(f"Existing user record: {existing_user is not None}")
+    
     # Update user with subscription info
     result = await db.users.update_one(
         {"user_id": user_id},
@@ -165,6 +171,13 @@ async def handle_checkout_session_completed(session):
     )
     
     logger.info(f"Updated user {user_id} with {plan} plan (matched: {result.matched_count}, modified: {result.modified_count}, upserted: {result.upserted_id})")
+    
+    # Verify the update
+    updated_user = await db.users.find_one({"user_id": user_id})
+    if updated_user:
+        logger.info(f"Verification: User {user_id} now has plan: {updated_user.get('plan')}")
+    else:
+        logger.error(f"ERROR: Could not find user {user_id} after update!")
 
 
 async def handle_subscription_updated(subscription):

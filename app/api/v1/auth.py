@@ -197,12 +197,18 @@ async def get_current_user(user_id: str = Depends(get_current_user_id)):
         db = await get_database()
         user_doc = await db.users.find_one({"user_id": user_id})
         
+        logger.info(f"Fetching profile for user_id: {user_id}")
+        logger.info(f"User doc found: {user_doc is not None}")
+        
         plan = "free"
         subscription_status = None
         
         if user_doc:
             plan = user_doc.get("plan", "free")
             subscription_status = user_doc.get("subscription_status")
+            logger.info(f"User {user_id} has plan: {plan}, status: {subscription_status}")
+        else:
+            logger.warning(f"No user document found in MongoDB for user_id: {user_id}")
         
         return {
             "uid": user.uid,
@@ -216,6 +222,27 @@ async def get_current_user(user_id: str = Depends(get_current_user_id)):
     except Exception as e:
         logger.error(f"Error getting user: {e}")
         raise HTTPException(status_code=404, detail="User not found")
+
+
+@router.get("/debug/user-plan")
+async def debug_user_plan(user_id: str = Depends(get_current_user_id)):
+    """Debug endpoint to check user plan in database."""
+    try:
+        db = await get_database()
+        user_doc = await db.users.find_one({"user_id": user_id})
+        
+        return {
+            "user_id": user_id,
+            "found": user_doc is not None,
+            "document": user_doc if user_doc else None,
+            "plan": user_doc.get("plan") if user_doc else "not found",
+            "subscription_status": user_doc.get("subscription_status") if user_doc else "not found"
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "user_id": user_id
+        }
 
 
 # API Key Management
