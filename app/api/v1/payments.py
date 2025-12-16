@@ -56,31 +56,24 @@ async def create_checkout_session(
 
 @router.post("/webhook", include_in_schema=False)
 async def stripe_webhook(request: Request):
-    """
-    Handle Stripe webhook events.
-    This endpoint is called by Stripe when events occur (e.g., successful payment).
-    """
+    """Handle Stripe webhook events - no authentication required"""
     payload = await request.body()
     sig_header = request.headers.get('stripe-signature')
     
-    webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET", settings.STRIPE_WEBHOOK_SECRET if hasattr(settings, "STRIPE_WEBHOOK_SECRET") else "")
-    
-    if not webhook_secret:
-        if not settings.TEST_MODE:
-            raise HTTPException(status_code=500, detail="Webhook secret not configured")
+    webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET", getattr(settings, "STRIPE_WEBHOOK_SECRET", ""))
     
     try:
         if webhook_secret and sig_header:
-            event = stripe.Webhook.construct_event(
-                payload, sig_header, webhook_secret
-            )
+            event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
         else:
             import json
             event = json.loads(payload)
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(status_code=400, detail="Invalid payload")
-    except stripe.error.SignatureVerificationError as e:
+    except stripe.error.SignatureVerificationError:
         raise HTTPException(status_code=400, detail="Invalid signature")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
     
     event_type = event['type']
     
@@ -101,73 +94,92 @@ async def stripe_webhook(request: Request):
             invoice = event['data']['object']
             await handle_payment_failed(invoice)
             
-        elif event_type in ['invoice.payment_succeeded', 'invoice.paid', 'invoice_payment.paid']:
+        elif event_type in ['invoice.payment_succeeded', 'invoice.paid']:
             invoice = event['data']['object']
             await handle_invoice_payment_succeeded(invoice)
+        
+        elif event_type == 'customer.subscription.created':
+            subscription = event['data']['object']
+            await handle_subscription_created(subscription)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"status": "error", "message": str(e)}
     
     return {"status": "success"}
 
 
-async def handle_checkout_session_completed(session):
-    """Handle successful checkout session."""
-    user_id = session.get('client_reference_id') or session.get('metadata', {}).get('user_id')
+async def handle_subscription_created(subscription):
+    """Handle subscription creation - this comes before checkout completes"""
+    customer_id = subscription.get('customer')
+    subscription_id = subscription.get('id')
     
-    if not user_id:
-        logger.error("No user_id found in checkout session")
+    if not customer_id:
         return
     
-    customer_id = session.get('customer')
-    subscription_id = session.get('subscription')
-    
-    # Map actual Stripe price IDs to plan names
     PRICE_ID_TO_PLAN = {
         'price_1SdltnRu2lPW20DirecI5Ata': 'starter',
         'price_1Sdlu6Ru2lPW20DiERsErBf5': 'pro',
     }
     
-    # Get subscription details to determine the plan
-    plan = "pro"  # Default to pro if we can't determine
-    if subscription_id:
-        try:
-            subscription = stripe.Subscription.retrieve(subscription_id)
-            # Get the price ID from the subscription
-            if subscription.items.data:
-                price_id = subscription.items.data[0].price.id
-                # Map price ID to plan name
-                plan = PRICE_ID_TO_PLAN.get(price_id, "pro")
-        except Exception as e:
-            logger.error(f"Error retrieving subscription: {e}")
+    plan = "pro"
+    if subscription.get('items') and subscription['items'].get('data'):
+        price_id = subscription['items']['data'][0]['price']['id']
+        plan = PRICE_ID_TO_PLAN.get(price_id, "pro")
     
     db = await get_database()
     
-    # First check if user exists
-    existing_user = await db.users.find_one({"user_id": user_id})
-    
-    if existing_user:
-        # Update existing user
-        result = await db.users.update_one(
-            {"user_id": user_id},
-            {
-                "$set": {
-                    "stripe_customer_id": customer_id,
-                    "stripe_subscription_id": subscription_id,
-                    "subscription_status": "active",
-                    "plan": plan
-                }
+    # Update by customer_id since we might not have user_id yet
+    await db.users.update_one(
+        {"stripe_customer_id": customer_id},
+        {
+            "$set": {
+                "stripe_subscription_id": subscription_id,
+                "subscription_status": "active",
+                "plan": plan
             }
-        )
-    else:
-        # Create new user document
-        await db.users.insert_one({
-            "user_id": user_id,
-            "stripe_customer_id": customer_id,
-            "stripe_subscription_id": subscription_id,
-            "subscription_status": "active",
-            "plan": plan
-        })
+        }
+    )
+
+
+async def handle_checkout_session_completed(session):
+    """Handle successful checkout session - links customer to user"""
+    user_id = session.get('client_reference_id') or session.get('metadata', {}).get('user_id')
+    customer_id = session.get('customer')
+    subscription_id = session.get('subscription')
+    
+    if not user_id or not customer_id:
+        return
+    
+    PRICE_ID_TO_PLAN = {
+        'price_1SdltnRu2lPW20DirecI5Ata': 'starter',
+        'price_1Sdlu6Ru2lPW20DiERsErBf5': 'pro',
+    }
+    
+    plan = "pro"
+    if subscription_id:
+        try:
+            subscription = stripe.Subscription.retrieve(subscription_id)
+            if subscription.items.data:
+                price_id = subscription.items.data[0].price.id
+                plan = PRICE_ID_TO_PLAN.get(price_id, "pro")
+        except Exception:
+            pass
+    
+    db = await get_database()
+    
+    # Update or create user with both user_id and customer_id
+    await db.users.update_one(
+        {"user_id": user_id},
+        {
+            "$set": {
+                "stripe_customer_id": customer_id,
+                "stripe_subscription_id": subscription_id,
+                "subscription_status": "active",
+                "plan": plan
+            }
+        },
+        upsert=True
+    )
 
 
 async def handle_subscription_updated(subscription):
