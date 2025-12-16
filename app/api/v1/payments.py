@@ -67,9 +67,6 @@ async def stripe_webhook(request: Request):
     webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET", settings.STRIPE_WEBHOOK_SECRET if hasattr(settings, "STRIPE_WEBHOOK_SECRET") else "")
     
     if not webhook_secret:
-        logger.warning("Stripe webhook secret not configured")
-        # In development, you might want to process events anyway
-        # In production, you should require the webhook secret
         if not settings.TEST_MODE:
             raise HTTPException(status_code=500, detail="Webhook secret not configured")
     
@@ -79,19 +76,14 @@ async def stripe_webhook(request: Request):
                 payload, sig_header, webhook_secret
             )
         else:
-            # For testing without webhook secret
             import json
             event = json.loads(payload)
     except ValueError as e:
-        logger.error(f"Invalid payload: {e}")
         raise HTTPException(status_code=400, detail="Invalid payload")
     except stripe.error.SignatureVerificationError as e:
-        logger.error(f"Invalid signature: {e}")
         raise HTTPException(status_code=400, detail="Invalid signature")
     
-    # Handle the event
     event_type = event['type']
-    logger.info(f"Received Stripe event: {event_type}")
     
     try:
         if event_type == 'checkout.session.completed':
@@ -115,7 +107,6 @@ async def stripe_webhook(request: Request):
             await handle_invoice_payment_succeeded(invoice)
 
     except Exception as e:
-        logger.error(f"Error processing webhook event {event_type}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     
     return {"status": "success"}
@@ -128,8 +119,6 @@ async def handle_checkout_session_completed(session):
     if not user_id:
         logger.error("No user_id found in checkout session")
         return
-    
-    logger.info(f"Processing checkout for user_id: {user_id}")
     
     customer_id = session.get('customer')
     subscription_id = session.get('subscription')
@@ -150,28 +139,36 @@ async def handle_checkout_session_completed(session):
                 price_id = subscription.items.data[0].price.id
                 # Map price ID to plan name
                 plan = PRICE_ID_TO_PLAN.get(price_id, "pro")
-                logger.info(f"Detected plan '{plan}' from price_id '{price_id}'")
         except Exception as e:
             logger.error(f"Error retrieving subscription: {e}")
     
     db = await get_database()
     
-    # Update user with subscription info
-    result = await db.users.update_one(
-        {"user_id": user_id},
-        {
-            "$set": {
-                "stripe_customer_id": customer_id,
-                "stripe_subscription_id": subscription_id,
-                "subscription_status": "active",
-                "plan": plan,
-                "updated_at": stripe.util.convert_to_stripe_object(session)['created']
-            }
-        },
-        upsert=True
-    )
+    # First check if user exists
+    existing_user = await db.users.find_one({"user_id": user_id})
     
-    logger.info(f"Updated user {user_id} with {plan} plan")
+    if existing_user:
+        # Update existing user
+        result = await db.users.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "stripe_customer_id": customer_id,
+                    "stripe_subscription_id": subscription_id,
+                    "subscription_status": "active",
+                    "plan": plan
+                }
+            }
+        )
+    else:
+        # Create new user document
+        await db.users.insert_one({
+            "user_id": user_id,
+            "stripe_customer_id": customer_id,
+            "stripe_subscription_id": subscription_id,
+            "subscription_status": "active",
+            "plan": plan
+        })
 
 
 async def handle_subscription_updated(subscription):
@@ -197,14 +194,11 @@ async def handle_subscription_updated(subscription):
         plan = PRICE_ID_TO_PLAN.get(price_id)
         if plan:
             update_data["plan"] = plan
-            logger.info(f"Subscription updated: plan is {plan}")
 
     await db.users.update_one(
         {"stripe_customer_id": customer_id},
         {"$set": update_data}
     )
-    
-    logger.info(f"Updated subscription status for customer {customer_id} to {status}")
 
 
 async def handle_invoice_payment_succeeded(invoice):
@@ -213,12 +207,8 @@ async def handle_invoice_payment_succeeded(invoice):
     subscription_id = invoice.get('subscription')
     
     if not customer_id:
-        # If it's a one-off invoice or weird event
-        logger.warning(f"Invoice {invoice.get('id')} has no customer_id")
         return
 
-    logger.info(f"Processing invoice payment for customer: {customer_id}")
-    
     db = await get_database()
     
     # Check if we need to update plan
@@ -235,27 +225,20 @@ async def handle_invoice_payment_succeeded(invoice):
     
     try:
         if invoice.get('lines') and invoice['lines'].get('data'):
-            # Look for the subscription line item
             for line in invoice['lines']['data']:
                 if line.get('type') == 'subscription' and line.get('price'):
                     price_id = line['price']['id']
                     plan = PRICE_ID_TO_PLAN.get(price_id)
                     if plan:
                         update_data["plan"] = plan
-                        logger.info(f"Invoice payment: confirmed plan {plan}")
                         break
     except Exception as e:
-        logger.error(f"Error extracting plan from invoice: {e}")
+        pass
 
-    result = await db.users.update_one(
+    await db.users.update_one(
         {"stripe_customer_id": customer_id},
         {"$set": update_data}
     )
-    
-    if result.modified_count > 0:
-        logger.info(f"Updated user subscription for customer {customer_id}")
-    else:
-        logger.warning(f"No user found for customer {customer_id} during invoice payment")
 
 
 async def handle_subscription_deleted(subscription):
@@ -268,12 +251,9 @@ async def handle_subscription_deleted(subscription):
         {"stripe_customer_id": customer_id},
         {"$set": {
             "subscription_status": "canceled",
-            "plan": "free",  # Downgrade to free
-            "updated_at": subscription['created']
+            "plan": "free"
         }}
     )
-    
-    logger.info(f"Subscription canceled for customer {customer_id}")
 
 
 async def handle_payment_failed(invoice):
@@ -285,9 +265,7 @@ async def handle_payment_failed(invoice):
     await db.users.update_one(
         {"stripe_customer_id": customer_id},
         {"$set": {
-            "subscription_status": "past_due",
-            "updated_at": invoice['created']
+            "subscription_status": "past_due"
         }}
     )
-    
-    logger.warning(f"Payment failed for customer {customer_id}")
+
