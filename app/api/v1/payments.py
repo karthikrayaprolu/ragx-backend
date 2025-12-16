@@ -54,8 +54,7 @@ async def create_checkout_session(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/webhook")
-@router.post("/webhook/")
+@router.post("/webhook", include_in_schema=False)
 async def stripe_webhook(request: Request):
     """
     Handle Stripe webhook events.
