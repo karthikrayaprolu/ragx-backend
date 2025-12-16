@@ -271,6 +271,9 @@ async def update_profile(
 ):
     """Update current user profile (username, photo)."""
     try:
+        logger.info(f"Updating profile for user {user_id}")
+        logger.info(f"Update data: display_name={update_data.display_name}, photo_url_length={len(update_data.photo_url) if update_data.photo_url else 0}")
+        
         db = await get_database()
         
         update_fields = {}
@@ -285,11 +288,13 @@ async def update_profile(
         update_fields["updated_at"] = datetime.utcnow()
 
         # Update MongoDB
-        await db.users.update_one(
+        result = await db.users.update_one(
             {"user_id": user_id},
             {"$set": update_fields},
             upsert=True
         )
+        
+        logger.info(f"MongoDB update result: matched={result.matched_count}, modified={result.modified_count}, upserted={result.upserted_id}")
         
         # Try to update Firebase Auth as well
         try:
@@ -301,14 +306,15 @@ async def update_profile(
             
             if auth_update:
                 auth.update_user(user_id, **auth_update)
+                logger.info(f"Firebase Auth updated successfully")
         except Exception as e:
             logger.warning(f"Failed to update Firebase Auth profile: {e}")
             
         return {"message": "Profile updated successfully"}
 
     except Exception as e:
-        logger.error(f"Error updating profile: {e}")
-        raise HTTPException(status_code=500, detail="Failed to update profile")
+        logger.error(f"Error updating profile: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to update profile: {str(e)}")
 
 # API Key Management (existing code...)
 @router.post("/api-key")

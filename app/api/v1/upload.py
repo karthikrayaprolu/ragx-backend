@@ -163,3 +163,22 @@ async def get_stats(user_id: str = Depends(get_current_user_id)):
     except Exception as e:
         logger.error(f"Error getting stats: {e}")
         raise HTTPException(status_code=500, detail="Failed to get statistics")
+
+
+@router.get("/documents")
+async def get_user_documents(user_id: str = Depends(get_current_user_id)):
+    """
+    Get all uploaded documents for the current user.
+    """
+    try:
+        from app.services.document_service import document_service
+        documents = await document_service.get_user_documents(user_id)
+        
+        return {
+            "documents": documents,
+            "total": len(documents)
+        }
+    
+    except Exception as e:
+        logger.error(f"Error getting documents: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get documents")
