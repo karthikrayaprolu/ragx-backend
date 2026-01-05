@@ -40,12 +40,13 @@ app.add_middleware(
         "http://localhost:3000",  # Next.js dev server
         "http://127.0.0.1:3000",
         "https://rag-x.vercel.app",  # Production frontend
-        "https://*.vercel.app",
-        "https://ragx.appwrite.network/"  # All Vercel preview deployments
+        "https://ragx.appwrite.network",  # Backend domain (no trailing slash)
+        "https://*.vercel.app"  # All Vercel preview deployments
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Include API router
