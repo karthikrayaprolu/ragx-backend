@@ -41,6 +41,7 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "https://rag-x.vercel.app",
         "https://ragx.appwrite.network",
+        "https://ragx-backend.onrender.com",  # Render backend
         "https://*.vercel.app"
     ],
     allow_credentials=True,
