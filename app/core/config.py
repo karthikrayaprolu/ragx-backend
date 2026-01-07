@@ -14,12 +14,11 @@ class Settings(BaseSettings):
     MONGO_URI: str
     MONGO_DB_NAME: str = "ragx"
     
-    # OpenRouter Configuration (Free OpenAI-compatible API)
-    OPENROUTER_API_KEY: Optional[str] = None
-    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    # Gemini Configuration
+    GEMINI_API_KEY: Optional[str] = None
     
     # Model Configuration
-    LLM_MODEL: str = "openai/gpt-oss-20b:free"
+    LLM_MODEL: str = "gemini-2.5-flash"
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"  # Local sentence-transformers model
     EMBEDDING_DIMENSION: int = 384  # Matches all-MiniLM-L6-v2 output
     LLM_TEMPERATURE: float = 0.7

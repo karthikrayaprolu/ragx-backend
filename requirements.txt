@@ -10,7 +10,7 @@ python-dotenv
 openai
 pinecone
 langchain
-langchain-openai
+langchain-google-genai
 langchain-pinecone
 langchain-community
 langchain-text-splitters
