@@ -37,12 +37,13 @@ async def shutdown_db_client():
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3001",  # Allow local development
-        "http://127.0.0.1:3001",
+        "http://localhost:3000",  # Allow local development
+        "http://127.0.0.1:3000",
         "https://rag-x.vercel.app",
         "https://ragx.appwrite.network",
         "https://ragx-backend.onrender.com",  # Render backend
-        "https://*.vercel.app"
+        "https://*.vercel.app",
+        "http://0.0.0.0:10000"
     ],
     allow_credentials=True,
     allow_methods=["*"],
