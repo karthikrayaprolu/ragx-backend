@@ -6,9 +6,14 @@ services:
     plan: free
     buildCommand: "pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu"
     startCommand: "python -m uvicorn main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: ENVIRONMENT
+        value: production
+      - key: FRONTEND_URL
+        value: https://rag-x.vercel.app
       - key: PINECONE_API_KEY
         sync: false
       - key: PINECONE_INDEX_NAME
@@ -16,6 +21,8 @@ services:
       - key: MONGO_URI
         sync: false
       - key: MONGO_DB_NAME
+        sync: false
+      - key: GEMINI_API_KEY
         sync: false
       - key: OPENROUTER_API_KEY
         sync: false
