@@ -1,31 +1,67 @@
 from typing import List
 from app.core.config import settings
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
     """
-    Service for generating text embeddings using sentence-transformers.
+    Service for generating text embeddings.
     
-    Since OpenRouter doesn't provide embedding endpoints, we use a local
-    sentence-transformers model which is fast and free.
+    Uses Google's Gemini API for embeddings (low memory, no local models).
+    Falls back to simple hashing for development/testing if API key not available.
     """
     
     def __init__(self):
-        # Using all-MiniLM-L6-v2 - fast, good quality, 384 dimensions
-        # Or use all-mpnet-base-v2 for better quality (768 dimensions)
-        self.model = None
-        self.dimension = 384  # Matches the model output
+        self.dimension = 768  # Gemini embedding dimension
+        self.use_gemini = bool(settings.GEMINI_API_KEY)
+        
+        if not self.use_gemini:
+            logger.warning("GEMINI_API_KEY not set - using fallback embedding (not recommended for production)")
+            self.dimension = 384
     
-    def _get_model(self):
-        if self.model is None:
-            from sentence_transformers import SentenceTransformer
-            logger.info("Loading embedding model...")
-            self.model = SentenceTransformer('all-MiniLM-L6-v2')
-            logger.info("Loaded embedding model: all-MiniLM-L6-v2")
-        return self.model
+    def _generate_gemini_embedding(self, text: str) -> List[float]:
+        """Generate embedding using Gemini API (low memory)"""
+        try:
+            import google.generativeai as genai
+            
+            if not hasattr(self, '_genai_configured'):
+                genai.configure(api_key=settings.GEMINI_API_KEY)
+                self._genai_configured = True
+            
+            result = genai.embed_content(
+                model="models/embedding-001",
+                content=text,
+                task_type="retrieval_document"
+            )
+            return result['embedding']
+        except Exception as e:
+            logger.error(f"Gemini embedding failed: {e}")
+            # Fallback to simple method
+            return self._generate_fallback_embedding(text)
+    
+    def _generate_fallback_embedding(self, text: str) -> List[float]:
+        """Simple fallback embedding for development (not for production)"""
+        import hashlib
+        import struct
+        
+        # Create deterministic "embedding" from text hash
+        hash_obj = hashlib.sha256(text.encode())
+        hash_bytes = hash_obj.digest()
+        
+        # Convert to floats
+        embedding = []
+        for i in range(0, min(len(hash_bytes), 384 // 8), 4):
+            value = struct.unpack('f', hash_bytes[i:i+4])[0]
+            embedding.append(value)
+        
+        # Pad to 384 dimensions
+        while len(embedding) < 384:
+            embedding.append(0.0)
+        
+        return embedding[:384]
     
     def generate_embedding(self, text: str) -> List[float]:
         """
@@ -42,9 +78,10 @@ class EmbeddingService:
         if not text:
             raise ValueError("Cannot generate embedding for empty text")
         
-        model = self._get_model()
-        embedding = model.encode(text, convert_to_numpy=True)
-        return embedding.tolist()
+        if self.use_gemini:
+            return self._generate_gemini_embedding(text)
+        else:
+            return self._generate_fallback_embedding(text)
     
     def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
@@ -63,9 +100,13 @@ class EmbeddingService:
         if not cleaned_texts:
             return []
         
-        model = self._get_model()
-        embeddings = model.encode(cleaned_texts, convert_to_numpy=True)
-        return [emb.tolist() for emb in embeddings]
+        # Generate embeddings one by one (Gemini API doesn't support batch)
+        embeddings = []
+        for text in cleaned_texts:
+            emb = self.generate_embedding(text)
+            embeddings.append(emb)
+        
+        return embeddings
 
 
 # Singleton instance

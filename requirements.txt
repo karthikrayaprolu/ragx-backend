@@ -15,7 +15,8 @@ langchain-pinecone
 langchain-community
 langchain-text-splitters
 tiktoken
-sentence-transformers
+# sentence-transformers  # Removed - uses too much memory (300-400MB) on Render free tier
+google-generativeai  # For Gemini embeddings (low memory alternative)
 
 # --- Document Parsing (File Uploads) ---
 pypdf

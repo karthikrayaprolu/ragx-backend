@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     
     # Model Configuration
     LLM_MODEL: str = "gemini-2.5-flash"
-    EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"  # Local sentence-transformers model
-    EMBEDDING_DIMENSION: int = 384  # Matches all-MiniLM-L6-v2 output
+    EMBEDDING_MODEL: str = "models/embedding-001"  # Gemini embedding model (low memory)
+    EMBEDDING_DIMENSION: int = 768  # Matches Gemini embedding-001 output
     LLM_TEMPERATURE: float = 0.7
     
     # Chunking Configuration
