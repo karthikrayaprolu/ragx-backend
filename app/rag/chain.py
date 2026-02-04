@@ -74,8 +74,11 @@ class RAGChain:
         filter: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """Retrieve relevant context from user's documents."""
+        logger.info(f"Retrieving context for user: {user_id}, query: '{query[:50]}...'")
+        
         # Generate query embedding
         query_embedding = embedding_service.generate_embedding(query)
+        logger.debug(f"Generated query embedding with {len(query_embedding)} dimensions")
         
         # Query Pinecone
         results = pinecone_service.query_embeddings(
@@ -85,6 +88,12 @@ class RAGChain:
             filter=filter,
             include_metadata=True
         )
+        
+        logger.info(f"Retrieved {len(results)} results from Pinecone for user {user_id}")
+        if results:
+            logger.debug(f"Top result score: {results[0].get('score', 0):.4f}")
+        else:
+            logger.warning(f"No vectors found in namespace for user {user_id} - user may not have uploaded documents")
         
         return results
     

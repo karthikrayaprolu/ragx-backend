@@ -100,6 +100,8 @@ class PineconeService:
         self._ensure_initialized()
         namespace = self._get_user_namespace(user_id)
         
+        logger.info(f"Querying namespace '{namespace}' for user {user_id} with top_k={top_k}")
+        
         results = self.index.query(
             vector=query_vector,
             top_k=top_k,
@@ -107,6 +109,8 @@ class PineconeService:
             filter=filter,
             include_metadata=include_metadata
         )
+        
+        logger.info(f"Query returned {len(results.matches)} matches from namespace '{namespace}'")
         
         return [
             {

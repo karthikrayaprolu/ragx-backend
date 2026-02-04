@@ -182,3 +182,42 @@ async def get_user_documents(user_id: str = Depends(get_current_user_id)):
     except Exception as e:
         logger.error(f"Error getting documents: {e}")
         raise HTTPException(status_code=500, detail="Failed to get documents")
+
+
+@router.get("/debug/namespace")
+async def debug_namespace(user_id: str = Depends(get_current_user_id)):
+    """
+    Debug endpoint to check user's namespace in Pinecone.
+    """
+    try:
+        from app.services.document_service import document_service
+        
+        # Get vector stats
+        pinecone_stats = pinecone_service.get_namespace_stats(user_id)
+        
+        # Get documents from MongoDB
+        documents = await document_service.get_user_documents(user_id)
+        
+        # Try a test query
+        from app.rag.embeddings import embedding_service
+        test_embedding = embedding_service.generate_embedding("test query")
+        test_results = pinecone_service.query_embeddings(
+            user_id=user_id,
+            query_vector=test_embedding,
+            top_k=5,
+            include_metadata=True
+        )
+        
+        return {
+            "user_id": user_id,
+            "namespace": pinecone_stats["namespace"],
+            "vector_count": pinecone_stats["vector_count"],
+            "documents_in_mongodb": len(documents),
+            "test_query_results": len(test_results),
+            "documents": documents,
+            "sample_vectors": test_results[:2] if test_results else []
+        }
+    
+    except Exception as e:
+        logger.error(f"Error in debug endpoint: {e}")
+        raise HTTPException(status_code=500, detail=f"Debug failed: {str(e)}")
