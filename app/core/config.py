@@ -17,10 +17,21 @@ class Settings(BaseSettings):
     # Gemini Configuration
     GEMINI_API_KEY: Optional[str] = None
     
+    # OpenAI Configuration
+    OPENAI_API_KEY: Optional[str] = None
+    
+    # Groq Configuration (Free alternative to OpenAI)
+    GROQ_API_KEY: Optional[str] = None
+    
+    # HuggingFace Configuration
+    HUGGINGFACE_TOKEN: Optional[str] = None
+    HUGGINGFACE_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    
     # Model Configuration
-    LLM_MODEL: str = "gemini-2.5-flash"
-    EMBEDDING_MODEL: str = "models/embedding-001"  # Gemini embedding model (low memory)
-    EMBEDDING_DIMENSION: int = 768  # Matches Gemini embedding-001 output
+    LLM_PROVIDER: str = "groq"  # Options: "openai" or "groq"
+    LLM_MODEL: str = "llama-3.1-8b-instant"  # Groq model (free and fast)
+    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"  # HuggingFace embedding model
+    EMBEDDING_DIMENSION: int = 384  # all-MiniLM-L6-v2 produces 384 dimensions
     LLM_TEMPERATURE: float = 0.7
     
     # Chunking Configuration

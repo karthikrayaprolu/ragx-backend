@@ -19,6 +19,7 @@ class DocumentService:
         document_id: str, 
         filename: str, 
         file_type: str, 
+        file_size: int = 0,
         metadata: Dict[str, Any] = None
     ):
         """Register a new document in MongoDB."""
@@ -28,6 +29,7 @@ class DocumentService:
             "user_id": user_id,
             "filename": filename,
             "file_type": file_type,
+            "file_size": file_size,
             "metadata": metadata or {},
             "created_at": datetime.utcnow(),
             "status": "processed"

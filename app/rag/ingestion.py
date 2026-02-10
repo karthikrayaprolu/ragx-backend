@@ -35,6 +35,9 @@ class DocumentIngestionService:
         """
         Process a document and store embeddings in Pinecone.
         """
+        # Get file size
+        file_size = len(file_content)
+        
         # Parse document to text
         text = self.parser.parse(file_content, file_type)
         
@@ -79,6 +82,7 @@ class DocumentIngestionService:
             document_id=document_id,
             filename=filename,
             file_type=file_type,
+            file_size=file_size,
             metadata=metadata
         )
         
@@ -143,6 +147,7 @@ class DocumentIngestionService:
             document_id=document_id,
             filename=source_name,
             file_type="text/plain",
+            file_size=len(text.encode('utf-8')),
             metadata=metadata
         )
         

@@ -36,16 +36,26 @@ class RAGChain:
         if self.chain_with_history is None:
             logger.info("Initializing RAGChain components...")
             # Import here to avoid heavy startup cost
-            from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
             from langchain_core.runnables.history import RunnableWithMessageHistory
             
-            # Initialize Chat Model
-            self.llm = ChatGoogleGenerativeAI(
-                model=settings.LLM_MODEL,
-                temperature=settings.LLM_TEMPERATURE,
-                google_api_key=settings.GEMINI_API_KEY
-            )
+            # Initialize Chat Model based on provider
+            if settings.LLM_PROVIDER == "groq":
+                from langchain_groq import ChatGroq
+                logger.info(f"Using Groq LLM: {settings.LLM_MODEL}")
+                self.llm = ChatGroq(
+                    model=settings.LLM_MODEL,
+                    temperature=settings.LLM_TEMPERATURE,
+                    groq_api_key=settings.GROQ_API_KEY
+                )
+            else:
+                from langchain_openai import ChatOpenAI
+                logger.info(f"Using OpenAI LLM: {settings.LLM_MODEL}")
+                self.llm = ChatOpenAI(
+                    model=settings.LLM_MODEL,
+                    temperature=settings.LLM_TEMPERATURE,
+                    openai_api_key=settings.OPENAI_API_KEY
+                )
             
             # Define Prompt Template
             self.prompt = ChatPromptTemplate.from_messages([

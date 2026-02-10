@@ -8,60 +8,34 @@ logger = logging.getLogger(__name__)
 
 class EmbeddingService:
     """
-    Service for generating text embeddings.
+    Service for generating text embeddings using HuggingFace sentence-transformers.
     
-    Uses Google's Gemini API for embeddings (low memory, no local models).
-    Falls back to simple hashing for development/testing if API key not available.
+    Uses all-MiniLM-L6-v2 model (384 dimensions) - free and fast.
     """
     
     def __init__(self):
-        self.dimension = 768  # Gemini embedding dimension
-        self.use_gemini = bool(settings.GEMINI_API_KEY)
-        
-        if not self.use_gemini:
-            logger.warning("GEMINI_API_KEY not set - using fallback embedding (not recommended for production)")
-            self.dimension = 384
+        self.dimension = settings.EMBEDDING_DIMENSION  # 384 for all-MiniLM-L6-v2
+        self.model = None
+        self._init_model()
     
-    def _generate_gemini_embedding(self, text: str) -> List[float]:
-        """Generate embedding using Gemini API (low memory)"""
+    def _init_model(self):
+        """Initialize HuggingFace sentence-transformers model"""
         try:
-            import google.generativeai as genai
+            from sentence_transformers import SentenceTransformer
             
-            if not hasattr(self, '_genai_configured'):
-                genai.configure(api_key=settings.GEMINI_API_KEY)
-                self._genai_configured = True
+            logger.info(f"Loading HuggingFace model: {settings.HUGGINGFACE_MODEL}")
             
-            result = genai.embed_content(
-                model="models/embedding-001",
-                content=text,
-                task_type="retrieval_document"
-            )
-            return result['embedding']
+            # Use token if provided
+            if settings.HUGGINGFACE_TOKEN:
+                os.environ['HUGGINGFACE_TOKEN'] = settings.HUGGINGFACE_TOKEN
+                self.model = SentenceTransformer(settings.HUGGINGFACE_MODEL, use_auth_token=settings.HUGGINGFACE_TOKEN)
+            else:
+                self.model = SentenceTransformer(settings.HUGGINGFACE_MODEL)
+            
+            logger.info(f"HuggingFace model loaded successfully (dimension: {self.dimension})")
         except Exception as e:
-            logger.error(f"Gemini embedding failed: {e}")
-            # Fallback to simple method
-            return self._generate_fallback_embedding(text)
-    
-    def _generate_fallback_embedding(self, text: str) -> List[float]:
-        """Simple fallback embedding for development (not for production)"""
-        import hashlib
-        import struct
-        
-        # Create deterministic "embedding" from text hash
-        hash_obj = hashlib.sha256(text.encode())
-        hash_bytes = hash_obj.digest()
-        
-        # Convert to floats
-        embedding = []
-        for i in range(0, min(len(hash_bytes), 384 // 8), 4):
-            value = struct.unpack('f', hash_bytes[i:i+4])[0]
-            embedding.append(value)
-        
-        # Pad to 384 dimensions
-        while len(embedding) < 384:
-            embedding.append(0.0)
-        
-        return embedding[:384]
+            logger.error(f"Failed to load HuggingFace model: {e}")
+            raise RuntimeError(f"Cannot initialize embedding service: {e}")
     
     def generate_embedding(self, text: str) -> List[float]:
         """
@@ -71,27 +45,29 @@ class EmbeddingService:
             text: The text to embed
             
         Returns:
-            Embedding vector as a list of floats
+            Embedding vector as a list of floats (384 dimensions)
         """
         text = text.replace("\n", " ").strip()
         
         if not text:
             raise ValueError("Cannot generate embedding for empty text")
         
-        if self.use_gemini:
-            return self._generate_gemini_embedding(text)
-        else:
-            return self._generate_fallback_embedding(text)
+        try:
+            embedding = self.model.encode(text, convert_to_numpy=True)
+            return embedding.tolist()
+        except Exception as e:
+            logger.error(f"HuggingFace embedding failed: {e}")
+            raise
     
     def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
-        Generate embeddings for multiple texts in batch.
+        Generate embeddings for multiple texts in batch (much faster).
         
         Args:
             texts: List of texts to embed
             
         Returns:
-            List of embedding vectors
+            List of embedding vectors (each 384 dimensions)
         """
         # Clean texts
         cleaned_texts = [text.replace("\n", " ").strip() for text in texts]
@@ -100,13 +76,13 @@ class EmbeddingService:
         if not cleaned_texts:
             return []
         
-        # Generate embeddings one by one (Gemini API doesn't support batch)
-        embeddings = []
-        for text in cleaned_texts:
-            emb = self.generate_embedding(text)
-            embeddings.append(emb)
-        
-        return embeddings
+        try:
+            # Batch encoding is much faster
+            embeddings = self.model.encode(cleaned_texts, convert_to_numpy=True, show_progress_bar=True)
+            return embeddings.tolist()
+        except Exception as e:
+            logger.error(f"HuggingFace batch embedding failed: {e}")
+            raise
 
 
 # Singleton instance

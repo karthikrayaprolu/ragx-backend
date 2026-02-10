@@ -14,9 +14,11 @@ langchain-google-genai
 langchain-pinecone
 langchain-community
 langchain-text-splitters
+langchain-openai
 tiktoken
-# sentence-transformers  # Removed - uses too much memory (300-400MB) on Render free tier
-google-generativeai  # For Gemini embeddings (low memory alternative)
+sentence-transformers
+torch
+langchain-groq
 
 # --- Document Parsing (File Uploads) ---
 pypdf
@@ -26,7 +28,6 @@ openpyxl
 # --- Authentication (Firebase) ---
 firebase-admin
 
-# --- Database Connections (SQL/NoSQL) ---
 sqlalchemy
 psycopg2-binary
 pymysql
