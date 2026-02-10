@@ -7,18 +7,15 @@ pydantic-settings
 python-dotenv
 
 # --- AI & Vector Database (RAG) ---
-openai
 pinecone
 langchain
-langchain-google-genai
-langchain-pinecone
-langchain-community
 langchain-text-splitters
+langchain-groq
 langchain-openai
-tiktoken
+langchain-mongodb
 sentence-transformers
 torch
-langchain-groq
+tiktoken
 
 # --- Document Parsing (File Uploads) ---
 pypdf
@@ -28,13 +25,10 @@ openpyxl
 # --- Authentication (Firebase) ---
 firebase-admin
 
-sqlalchemy
-psycopg2-binary
-pymysql
+# --- Database ---
 pymongo
 motor
 dnspython
-langchain-mongodb 
-pymongo 
+
+# --- Payments ---
 stripe
-langchain_mongodb
